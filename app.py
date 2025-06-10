@@ -25,10 +25,11 @@ df = load_data()
 states = df["state"].unique()
 
 # --- Títol ---
-st.title("🔫 Anàlisi de la Violència Armada als EUA")
+st.title("Anàlisi de la Violència Armada als EUA")
 
 # --- Evolució temporal ---
 st.header("🗓️ Evolució temporal d'incidents")
+st.subheader("Com ha evolucionat el nombre d’incidents de violència armada als EUA al llarg del temps?")
 monthly = df.groupby("month")["incident_id"].count().reset_index(name="incidents")
 fig1 = px.line(monthly, x="month", y="incidents", title="Incidents mensuals")
 st.plotly_chart(fig1, use_container_width=True)
@@ -44,8 +45,59 @@ df["year"] = df["date"].dt.year
 # Mes com a número (1-12)
 df["month_num"] = df["date"].dt.month
 
+# --- Evolució anual per mesos ---
+st.header("📈 Evolució anual d'incidents per mes")
+col_yearly = st.columns(1)
+with col_yearly[0]:
+    selected_state_yearly = st.selectbox(
+        "Selecciona estat per evolució anual", ["Tots"] + list(states), index=0, key="yearly_state"
+    )
+
+# Filtrar segons selecció d'estat
+filtered_df_yearly = df.copy()
+if selected_state_yearly != "Tots":
+    filtered_df_yearly = filtered_df_yearly[filtered_df_yearly["state"] == selected_state_yearly]
+
+# Agrupar per any i mes
+incidents_per_year_month = (
+    filtered_df_yearly.groupby(["year", "month_num"])["incident_id"].count().reset_index()
+)
+
+# Assegurar que tots els mesos hi són per cada any
+all_years = incidents_per_year_month["year"].unique()
+full_index = pd.MultiIndex.from_product([all_years, range(1, 13)], names=["year", "month_num"])
+incidents_per_year_month = incidents_per_year_month.set_index(["year", "month_num"]).reindex(full_index, fill_value=0).reset_index()
+incidents_per_year_month["month_cat"] = incidents_per_year_month["month_num"].apply(lambda x: MESOS_CAT[x-1])
+
+# Gràfic: cada línia és un any
+fig_yearly = go.Figure()
+for year in sorted(all_years):
+    data = incidents_per_year_month[incidents_per_year_month["year"] == year]
+    fig_yearly.add_trace(go.Scatter(
+        x=data["month_cat"],
+        y=data["incident_id"],
+        mode="lines+markers",
+        name=str(year)
+    ))
+fig_yearly.update_layout(
+    title="Incidents per mes per any",
+    xaxis_title="Mes",
+    yaxis_title="Incidents",
+    legend_title="Any",
+    legend=dict(
+        orientation="h",
+        yanchor="bottom",
+        y=-0.3,
+        xanchor="center",
+        x=0.5
+    ),
+)
+fig_yearly.update_xaxes(categoryorder="array", categoryarray=MESOS_CAT)
+st.plotly_chart(fig_yearly, use_container_width=True)
+
 # Selecció d'any i estat (ara a la pàgina, no a la barra lateral)
 st.header("📅 Evolució temporal interactiva d'incidents")
+st.subheader("Com varien els incidents i les comprovacions d’antecedents d’armes al llarg dels mesos, segons l’any i l’estat?")
 col1, col2 = st.columns(2)
 anys = sorted(df["year"].unique())
 anys_options = ["Tots"] + [str(a) for a in anys]
@@ -134,58 +186,9 @@ fig_interactive.update_layout(
 fig_interactive.update_xaxes(categoryorder="array", categoryarray=MESOS_CAT)
 st.plotly_chart(fig_interactive, use_container_width=True)
 
-# --- Evolució anual per mesos ---
-st.header("📈 Evolució anual d'incidents per mes")
-col_yearly = st.columns(1)
-with col_yearly[0]:
-    selected_state_yearly = st.selectbox(
-        "Selecciona estat per evolució anual", ["Tots"] + list(states), index=0, key="yearly_state"
-    )
-
-# Filtrar segons selecció d'estat
-filtered_df_yearly = df.copy()
-if selected_state_yearly != "Tots":
-    filtered_df_yearly = filtered_df_yearly[filtered_df_yearly["state"] == selected_state_yearly]
-
-# Agrupar per any i mes
-incidents_per_year_month = (
-    filtered_df_yearly.groupby(["year", "month_num"])["incident_id"].count().reset_index()
-)
-
-# Assegurar que tots els mesos hi són per cada any
-all_years = incidents_per_year_month["year"].unique()
-full_index = pd.MultiIndex.from_product([all_years, range(1, 13)], names=["year", "month_num"])
-incidents_per_year_month = incidents_per_year_month.set_index(["year", "month_num"]).reindex(full_index, fill_value=0).reset_index()
-incidents_per_year_month["month_cat"] = incidents_per_year_month["month_num"].apply(lambda x: MESOS_CAT[x-1])
-
-# Gràfic: cada línia és un any
-fig_yearly = go.Figure()
-for year in sorted(all_years):
-    data = incidents_per_year_month[incidents_per_year_month["year"] == year]
-    fig_yearly.add_trace(go.Scatter(
-        x=data["month_cat"],
-        y=data["incident_id"],
-        mode="lines+markers",
-        name=str(year)
-    ))
-fig_yearly.update_layout(
-    title="Incidents per mes per any",
-    xaxis_title="Mes",
-    yaxis_title="Incidents",
-    legend_title="Any",
-    legend=dict(
-        orientation="h",
-        yanchor="bottom",
-        y=-0.3,
-        xanchor="center",
-        x=0.5
-    ),
-)
-fig_yearly.update_xaxes(categoryorder="array", categoryarray=MESOS_CAT)
-st.plotly_chart(fig_yearly, use_container_width=True)
-
 # --- Visualització: Evolució d'incidents i taxa d'atur ---
 st.header("📉 Evolució d'incidents i taxa d'atur")
+st.subheader("Com han variat els incidents i la taxa d'atur en els EUA al llarg del temps? Hi ha relació?")
 col_evol_year, col_evol_state = st.columns(2)
 with col_evol_year:
     anys_evol = sorted(df["year"].unique())
@@ -270,6 +273,8 @@ st.plotly_chart(fig_evol, use_container_width=True)
 
 # --- Heatmap d'incidents per estat ---
 st.header("🗺️ Incidents per estat als EUA")
+st.subheader("Quina és la distribució geogràfica dels incidents de violència armada als EUA?")
+st.subheader("Quin partit polític va guanyar les eleccions de 2020 a cada estat, i com es relaciona amb la violència armada?")
 col_heatmap1, col_heatmap2 = st.columns([2, 1])
 with col_heatmap1:
     anys_heatmap = sorted(df["year"].unique())
@@ -437,6 +442,7 @@ st.plotly_chart(fig_map, use_container_width=True)
 
 # --- Incidents per ciutat ---
 st.header("🏙️ Ciutats amb més incidents")
+st.subheader("Quines són les ciutats o comtats amb més incidents de violència armada?")
 col_cities1, col_cities2 = st.columns(2)
 with col_cities1:
     anys_cities = sorted(df["year"].unique())
@@ -462,6 +468,7 @@ st.plotly_chart(fig2, use_container_width=True)
 
 # --- Barplot: Edat i gènere per tipus de participant ---
 st.header("👥 Edat i gènere per tipus de participant")
+st.subheader("Quin és el perfil dels participants en incidents de violència armada? Hi ha diferències segons el gènere?")
 col_parttype, col_year, col_state = st.columns(3)
 with col_parttype:
     participant_type_options = ["Victim", "Subject-Suspect"]
@@ -563,6 +570,7 @@ else:
 
 # --- Barplot: Víctimes mortals per la policia per gènere i mes ---
 st.header("👮‍♂️ Víctimes mortals per la policia per gènere i mes")
+st.subheader("Hi ha diferències entre el nombre de víctimes mortals per gènere en incidents de violència armada?")
 col_police_year, col_police_state = st.columns([1,1])
 with col_police_year:
     anys_police = sorted(df["year"].unique())
@@ -636,7 +644,8 @@ else:
     st.plotly_chart(fig_police, use_container_width=True)
 
 # --- Barplot: Top 3 armes més utilitzades ---
-st.header("🔫 Top 3 armes més utilitzades")
+st.header("Top 3 armes més utilitzades")
+st.subheader("Quines són les armes més utilitzades en incidents de violència armada?")
 col_weapon_year, col_weapon_state = st.columns(2)
 with col_weapon_year:
     anys_weapon = sorted(df["year"].unique())
@@ -689,6 +698,7 @@ else:
 
 # --- Barplot: Incidents amb armes robades vs legals ---
 st.header("🔒 Incidents amb armes robades vs legals")
+st.subheader("Hi ha diferències en el nombre d'incidents amb armes robades vs legals segons l'estat?")
 col_stolen_year, col_stolen_state = st.columns(2)
 with col_stolen_year:
     anys_stolen = sorted(df["year"].unique())
@@ -734,6 +744,7 @@ st.plotly_chart(fig_stolen, use_container_width=True)
 
 # --- Visualització: Relació entre nombre d'armes i nombre de víctimes ---
 st.header("📈 Relació entre nombre d'armes i nombre de víctimes")
+st.subheader("Hi ha una relació entre el nombre d'armes i el nombre de víctimes en incidents de violència armada?")
 col_line_year, col_line_state = st.columns(2)
 with col_line_year:
     anys_line = sorted(df["year"].unique())
@@ -786,7 +797,7 @@ else:
 
 # --- Wordcloud: Notes i Característiques de l'incident ---
 st.header("☁️ Paraules més freqüents en notes i característiques d'incidents")
-
+st.subheader("Quines són les paraules més freqüents en notes i característiques d'incidents de violència armada?")
 # Merge notes and incident_characteristics, handle NaN
 text_data = (
     df["notes"].fillna("") + " " + df["incident_characteristics"].fillna("")
